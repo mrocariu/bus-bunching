@@ -1,0 +1,232 @@
+library(data.table)
+library(ggplot2)
+
+# dta <- fread("C:/Users/ambuehll/Desktop/odd_data/data/delay_data/fahrzeitensollist2015092720151003.csv")
+dta <- fread("C:/Mireia/ambuehll/Desktop/odd_data/data/delay_data/fahrzeitensollist2015092720151003.csv")
+
+dateformat <- "%d.%m.%y"
+
+
+line80 <- dta[linie==80 &  halt_kurz_von1 == "HOEB" & richtung == 2 & datum_von=="21.09.15"]
+
+
+setorder(line80, soll_an_von)
+line80[, diff:= ist_an_von-shift(ist_an_von)]
+
+tt <- line80[,c("fahrzeug", "soll_an_von", "ist_an_von","diff")][soll_an_von>18000&diff>0&diff<60]
+
+
+hist(tt$diff)
+
+
+
+#--- general approach
+
+line80 <- dta[linie==80 & datum_von=="21.09.15" & richtung==2]
+
+
+line80 <- dta[linie==80 & richtung==2]
+
+
+setorder(line80, soll_an_von)
+line80[, diff:= ist_an_von-shift(ist_an_von), by=.(halt_kurz_von1, datum_von)]
+
+tt <- line80[,c("fahrzeug", "soll_an_von", "ist_an_von","diff","halt_kurz_von1", "seq_von","kurs","fahrt_id","datum_von" )][soll_an_von>18000&diff>0]
+
+#tt[,fahrt_id:=paste0(datum_von, fahrt_id)]
+
+setorder(tt, seq_von)
+tt[seq_von==28]$fahrt_id
+full <- data.table(unique(cbind(tt[fahrt_id== 435552]$halt_kurz_von1,tt[fahrt_id== 435552]$seq_von)))
+fullf <- factor(full$V1,levels = full$V1, ordered = T)
+tt$fullf <- factor(tt$halt_kurz_von1,levels = full$V1, ordered = T)
+
+
+tt[,fahrt_iddate:= paste(fahrt_id, datum_von)]
+
+filter <- unique(tt[diff<180]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+
+
+
+
+# stopsdv<- tt[diff<180,.(sddiff= sd(diff,na.rm = T)), by= seq_von]
+
+
+ggplot(data= subtt, aes(fullf, diff, color=factor(fahrt_id)))+
+  geom_path(size=2)
+
+oneday <- subtt[datum_von=="21.09.15"]
+# 
+# ggplot(data = subtt, aes(x = fullf, y = diff, color = factor(fahrt_id), group = factor(fahrt_id))) +
+#   geom_line(size=1.1)
+# 
+# ggplot(data = subtt, aes(x = fullf, y = diff, group = factor(fahrt_id))) +
+#   geom_line(size=1.1)
+
+ggplot(data = subtt, aes(x = fullf, y = diff, group = factor(paste(fahrt_id, datum_von)))) +
+  geom_line(size=1.1)
+
+ggplot(data = oneday, aes(x = fullf, y = diff, group = factor(fahrt_id))) +
+  geom_line(size=1.1)
+
+
+###---- 
+
+
+hist(subtt$ist_an_von)
+
+ggplot(data = subtt[ist_an_von >50000], aes(x = fullf, y = diff, group = factor(paste(fahrt_id, datum_von)))) +
+  geom_line(size=1.1)
+
+hist(subtt)
+
+
+tt[ist_an_von>25000 & ist_an_von <32400 ,peak:="morning"]
+tt[ist_an_von> 57600 & ist_an_von < 68400 ,peak:="evening"]
+
+ggplot(data = tt[ist_an_von >20000& ist_an_von<80000& diff<1000], aes(x = fullf, y = diff, color=peak, group = factor(paste(fahrt_id, datum_von)))) +
+  geom_line(size=1.1)+geom_hline(yintercept=450, color="red")+facet_grid(.~datum_von)
+
+
+
+ggplot(data = tt[ist_an_von >20000& ist_an_von<80000& diff<1000 & is.na(peak)==F], aes(x = fullf, y = diff, color=peak, group = factor(paste(fahrt_id, datum_von)))) +
+  geom_line(size=1.1)+geom_hline(yintercept=450, color="red")+facet_grid(.~datum_von)
+
+
+filter <- unique(tt[diff<60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum1 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=60]
+
+filter <- unique(tt[diff<120]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum2 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=120]
+
+filter <- unique(tt[diff<180]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum3 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=180]
+
+filter <- unique(tt[diff<240]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum4 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=240]
+
+haltsum <- rbind(haltsum1,haltsum2,haltsum3,haltsum4)
+
+ggplot(haltsum, aes(x=fullf, y=dropsum, color=factor(headway),group= headway))+
+  geom_line()
+
+#mutually excl
+
+filter <- unique(tt[diff<60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum1 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=60]
+
+filter <- unique(tt[diff<120 & diff>60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum2 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=120]
+
+filter <- unique(tt[diff<180& diff>120]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum3 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=180]
+
+filter <- unique(tt[diff<240 & diff>180]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum4 <- subtt[fullf!= "TRIS",.(dropsum = mean(diff)), by= .(fullf)][,headway:=240]
+
+haltsum <- rbind(haltsum1,haltsum2,haltsum3,haltsum4)
+
+ggplot(haltsum, aes(x=fullf, y=dropsum, color=factor(headway),group= headway))+
+  geom_line()
+
+
+
+
+
+
+
+filter <- unique(tt[diff<60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum1 <- subtt[fullf!= "TRIS",.(dropsum = median(diff)), by= .(fullf,weekday)][,headway:=60]
+
+filter <- unique(tt[diff<120 & diff>60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum2 <- subtt[fullf!= "TRIS",.(dropsum = median(diff)), by= .(fullf,weekday)][,headway:=120]
+
+filter <- unique(tt[diff<180& diff>120]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum3 <- subtt[fullf!= "TRIS",.(dropsum = median(diff)), by= .(fullf,weekday)][,headway:=180]
+
+filter <- unique(tt[diff<240 & diff>180]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum4 <- subtt[fullf!= "TRIS",.(dropsum = median(diff)), by= .(fullf,weekday)][,headway:=240]
+
+filter <- unique(tt[diff>240]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum5 <- subtt[fullf!= "TRIS",.(dropsum = median(diff)), by= .(fullf,weekday)][,headway:=241]
+
+haltsum <- rbind(haltsum1,haltsum2,haltsum3,haltsum4,haltsum5)
+
+ggplot(haltsum[weekday %in% 1:5], aes(x=fullf, y=dropsum, color=factor(headway),group= (headway)))+
+  geom_line()+facet_grid(weekday~.)
+
+
+ggplot(haltsum, aes(x=fullf, y=dropsum, color=factor(headway),group= (headway)))+
+  geom_line()+facet_grid(.~datum_von)
+
+
+
+cc <- list.files(path = "C:/Users/ambuehll/Desktop/odd_data/data/delay_data/", pattern = "*.csv")
+tt_long0 <- data.table()
+for(i in 1:24){
+  
+  tt_long  <- fread(paste0( "C:/Users/ambuehll/Desktop/odd_data/data/delay_data/",cc[i]),
+                    select =c("linie","richtung","fahrzeug", "soll_an_von", "ist_an_von","halt_kurz_von1", "seq_von","kurs","fahrt_id","datum_von" ))
+  tt_long0 <- rbind(tt_long0, tt_long)
+}
+
+line80 <- tt_long0[linie==80 & richtung==1]
+
+time <- line80$datum_von
+time1 <- as.POSIXlt(time, format = dateformat)
+line80 <- cbind(line80,weekday=time1$wday)
+
+setorder(line80, soll_an_von)
+line80[, diff:= ist_an_von-shift(ist_an_von), by=.(halt_kurz_von1, datum_von)]
+#rm(tt_long0)
+
+tt <- line80[,c("fahrzeug", "soll_an_von", "ist_an_von","diff","halt_kurz_von1", "seq_von","kurs","fahrt_id","datum_von","weekday" )][soll_an_von>18000&diff>0]
+setorder(tt, seq_von)
+
+max(tt$seq_von)
+tt[seq_von==25]$fahrt_id
+
+full <- data.table(unique(cbind(tt[fahrt_id== 97529]$halt_kurz_von1,tt[fahrt_id== 97529]$seq_von)))
+full <- data.table(unique(cbind(tt[fahrt_id== 435552]$halt_kurz_von1,tt[fahrt_id== 435552]$seq_von)))
+full <- data.table(unique(cbind(tt[fahrt_id==  49434]$halt_kurz_von1,tt[fahrt_id==  49434]$seq_von)))
+
+
+fullf <- factor(full$V1,levels = full$V1, ordered = T)
+tt$fullf <- factor(tt$halt_kurz_von1,levels = full$V1, ordered = T)
+
+
+tt[,fahrt_iddate:= paste(fahrt_id, datum_von)]
+
+tt[ist_an_von>25000 & ist_an_von <32400 ,peak:="morning"]
+tt[ist_an_von> 57600 & ist_an_von < 68400 ,peak:="evening"]
+
+sel_id <- tt[,max(seq_von)>=25,by=fahrt_iddate]
+sel_id <- sel_id[V1==T]
+
+tt <- tt[fahrt_iddate %in% sel_id$fahrt_iddate]
+filter <- unique(tt[diff>60]$fahrt_iddate)
+subtt <- tt[fahrt_iddate %in% filter]
+haltsum <- subtt[weekday %in% 1:5][fullf!= "TRIS",.(dropsum = median(diff),obs=.N), by= .(fullf,peak)]
+
+save(haltsum, file= "haltsum.rda")
+
+ggplot(haltsum, aes(x=fullf, y=dropsum, color=factor(peak),group= peak))+
+  geom_line(size=2)+xlab("Station")+ylab("bus headways")+theme_bw()
+
+
+#------
+line80 <- dta[linie==80 & halt_kurz_von1 == "HOEB" & richtung == 2]
